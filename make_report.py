@@ -61,9 +61,12 @@ def q4_pair(fig, layer, bottom):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--student-id', default='[ADD STUDENT ID]')
+    parser.add_argument('--student-id', default='314551178')
     parser.add_argument('--github-url', default='https://github.com/chester71206/big_data_HW1')
     args = parser.parse_args()
+    if not args.student_id.isdigit():
+        parser.error("--student-id must contain digits only")
+    report_path = OUT / f'Asg1_{args.student_id}.pdf'
     df = pd.read_csv(OUT / 'benchmark_results.csv')
     assert len(df) == 7 and df.status.eq('ok').all()
     ranks = df[df.component.eq('default')].sort_values('rank')
@@ -95,7 +98,7 @@ def main():
         fig.savefig(OUT / 'q3_figures' / f'{task}_accuracy_by_component.png', dpi=200)
         plt.close(fig)
 
-    with PdfPages(OUT / 'Asg1_DRAFT.pdf') as pdf:
+    with PdfPages(report_path) as pdf:
         fig = page(1)
         heading(fig, .94, 'Rank, accuracy, and training cost')
         fig.text(.065, .91, f'Student ID: {args.student_id}', fontsize=10)
@@ -146,7 +149,7 @@ def main():
         heading(fig, .175, 'Evaluation limitations')
         paragraph(fig, .145, 'MATH predictions without an extracted answer: baseline 958/1,000; Top-rank 16/64/256: 552/470/452; rank-16 25%/50%/Bottom: 584/602/599. Thus, the fine-tuned range is 452-602. Some saved texts visibly end mid-expression, but token counts and stop reasons were not logged; truncation versus unrecognized answer format cannot be counted reliably. Unparsed answers count as incorrect. Results reflect generation and extraction, with one seed and 1,000 examples per task.', size=9.7)
         pdf.savefig(fig); plt.close(fig)
-    print(OUT / 'Asg1_DRAFT.pdf')
+    print(report_path)
 
 
 if __name__ == '__main__':
