@@ -1,247 +1,151 @@
-# BigData2026 Assignment 1 — Analysis of SVD for Fine-Tuning LLMs
+# Big Data Analytics Techniques and Applications — Assignment 1
 
-This repository contains the implementation code modified based on the paper **PiSSA (Principal Singular Values and Singular Vectors Adaptation)** published at NeurIPS 2024 (For full paper information, please refer to "References").  
+這份作業要用 SVD-based PiSSA 微調 `meta-llama/Llama-3.2-1B`，並以 GSM8K 和 MATH 的 accuracy 評估數學問答表現。作業是個人作業；最後要交一份英文報告，以及公開的 GitHub 程式碼 repository。
 
-The code is adapted from the original PiSSA implementation and modified to study how different parts of the singular-value spectrum affect low-rank fine-tuning.
+## 你要完成什麼
 
-Original work:
+報告最多 3 頁，A4，從 Word 匯出 PDF。依照 PDF 作業說明，逐題回答以下問題，提供結果、圖表和你自己的解釋：
 
-- Paper: [PiSSA: Principal Singular Values and Singular Vectors Adaptation of Large Language Models](https://proceedings.neurips.cc/paper_files/paper/2024/hash/db36f4d603cc9e3a2a5e10b93e6428f2-Abstract-Conference.html)
-- Official code: [MuLabPKU/PiSSA](https://github.com/MuLabPKU/PiSSA)
+### Question 1：不同 rank 的準確率（1%）
 
-## File Description
+1. 評估未微調的 Llama-3.2-1B，在 GSM8K 和 MATH 上的 accuracy。
+2. 用 rank 16、64、256 分別微調，再報告兩個資料集的 accuracy。
+3. 比較 rank 改變時兩個資料集的表現趨勢，並解釋可能原因。
 
-- ```finetune_q1-q3.ipynb```: File for Question 1 to Question 3 in Assignment 1.
-- ```finetune_q4.ipynb```: File for Question 4 in Assignment 1.
+`finetune_q1-q3.ipynb` 目前儲存的是 Q3 設定。首次重現 Q1–Q2 時，請使用下方三個 `component: 'default'` 的 run，並設定 `RUN_FRESH_BASELINE = True`，以執行 baseline 和三個 rank。
 
-The two ```.ipynb``` files can be run independently.
+### Question 2：訓練時間（1%）
 
-## Code Description
+沿用 Question 1 的 rank 16、64、256，記錄每個 run 的訓練時間（分鐘），比較並解釋趨勢。Notebook 會計算訓練迴圈時間並寫入 `benchmark_results.csv` 的 `train_minutes` 欄；計時不含 SVD 初始化、合併模型和評估。請在報告中註明這個計時範圍。
 
-This code fine-tunes `meta-llama/Llama-3.2-1B` on `MetaMathQA` and evaluates it on two datasets: `GSM8K` and `MATH`.
+### Question 3：奇異值區間（1%）
 
-### 1. Configuration
+固定 rank 16，分別取下列四個區間做微調：
 
-The configuration cell defines the model, datasets, training hyperparameters, evaluation settings, output directory, and PiSSA runs.
+| component | 選取的奇異值 |
+| --- | --- |
+| `default` | 最大的 16 個（起點 0） |
+| `25pct` | 從奇異值序列約 25% 處開始，連續 16 個 |
+| `50pct` | 從約 50% 處開始，連續 16 個 |
+| `bottom` | 最小的 16 個 |
 
-Important settings include:
+對 GSM8K 和 MATH 各自繪製四種設定的 accuracy 長條圖，並解釋兩個資料集的趨勢。Notebook 已支援四種 component；在 `MANUAL_RUNS` 設定 rank 16 的四個 component 後執行。兩張圖會存到 `q3_figures/`。
 
-```python
-MODEL_ID = "meta-llama/Llama-3.2-1B"
-METAMATH_TRAIN_LIMIT = 25000
-MAX_LENGTH = 512
-EPOCHS = 1
-LEARNING_RATE = 2e-5
-TARGET_GLOBAL_BATCH = 128
+### Question 4：q_proj 權重的 SVD（2%）
+
+這題只分析原始模型，不需要微調或評估。分析 Transformer layer 0、7、15 的 `q_proj` 權重：
+
+1. 對每個 layer 做 SVD，計算累積能量百分比：`cumsum(S**2) / sum(S**2) * 100`。
+2. 找出累積能量第一次達到至少 50% 的最小 rank，列在表格中。
+3. 每個 layer 各畫兩張圖：前 200 個 singular values 的 magnitude 長條圖，以及 cumulative energy 折線圖，共六張圖。
+4. 說明三個 layer 的奇異值分布與達到 50% 能量所需 rank 的差異。
+
+`finetune_q4.ipynb` 會對三個 layer 完成分析，輸出最小 rank 表格和六張圖。
+
+## 開始前：Kaggle 與 Hugging Face
+
+範例程式原本以 Kaggle 為執行環境；也可在有 CUDA GPU 的本機執行。Kaggle 設定如下：
+
+1. 準備可使用 GPU 的 Kaggle 帳號；課程投影片建議選 GPU T4 x2。Notebook 會在有兩張 GPU 時使用 DataParallel，也可在單張 CUDA GPU 執行。
+2. 到 Hugging Face 申請 `meta-llama/Llama-3.2-1B` 的 gated model 存取權，建立 read token。
+3. 在 Kaggle notebook 的 **Add-ons → Secrets** 新增 secret，名稱設為 `HF_TOKEN`，值貼上 Hugging Face token。不要把 token 寫進 notebook 或上傳到 GitHub。
+4. 將 `finetune_q1-q3.ipynb`、`finetune_q4.ipynb` 上傳或匯入 Kaggle，依照下方各題設定執行。
+
+Notebook 會下載 `meta-math/MetaMathQA` 的前 25,000 筆訓練資料，以及 `fxmeng/pissa-dataset` 中 GSM8K、MATH 各 1,000 筆測試資料。作業指定設定包含 1 epoch、learning rate `2e-5`、FP16、最多生成 256 tokens；除題目指定的 rank 和 component 外，不要任意更動基本設定。
+
+### 在本機使用 GPU
+
+本機已下載模型時，可設定 `ASSIGNMENT_MODEL_PATH` 指向模型資料夾。以下以 GPU 9 為例；`CUDA_VISIBLE_DEVICES=9` 會讓程式內的 `cuda:0` 對應到實體 GPU 9。先啟用包含 PyTorch、Transformers、Datasets、nbclient 的 Python 環境，再執行：
+
+```bash
+export ASSIGNMENT_MODEL_PATH=/home/ccchen/models/Llama-3.2-1B
+export ASSIGNMENT_MICRO_BATCH_SIZE=4
+export ASSIGNMENT_EVAL_BATCH_SIZE=16
+CUDA_VISIBLE_DEVICES=9 python run_notebook.py finetune_q1-q3.ipynb --timeout 18000
+CUDA_VISIBLE_DEVICES=9 python run_notebook.py finetune_q4.ipynb
 ```
 
-### 2. Settings for SVD
+`run_notebook.py` 會把執行後的 notebook 存在 `Assignment1_results/`；此目錄已加入 `.gitignore`，不會把模型輸出和預測檔推到公開 repository。Q3 執行前，將 `MANUAL_RUNS` 改成 rank 16 的四個 component，並將 `RUN_FRESH_BASELINE` 設為 `False`。
 
-- `rank`: the target rank used for truncated SVD
-- `component`: the selected range of singular values, corresponding to the settings in Question 3
-- `RUN_FRESH_BASELINE`: used to evaluate the original LLM without fine-tuning
+## 執行 Question 1–3
 
-
-```python
-
-"""
-`MANUAL_RUNS` is used to configure the SVD settings for fine-tuning the LLM.
-   - 'rank': the target rank used for truncated SVD
-   - 'component': the selected range of singular values, corresponding to the settings in Question 3
-"""
-MANUAL_RUNS = [
-   {'rank': 16, 'component': 'default'},
-]
-
-"""
-`RUN_FRESH_BASELINE` is used to evaluate the original LLM without fine-tuning.
-   - True: runs the original LLM as the baseline.
-   - False: skips the baseline evaluation.
-"""
-RUN_FRESH_BASELINE = True
-```
-
-### 3. Dataset Preparation
-
-`load_metamathqa_train_like_pissa()`
-- Loads the MetaMathQA training set.
-- Converts the data into the instruction/response format used for fine-tuning.
-
-`load_pissa_metamath_eval()`
-- Loads `fxmeng/pissa-dataset`.
-- Separates the evaluation data into GSM8K and MATH tasks.
-
-`tokenize_supervised_example()`
-- Tokenizes each instruction/response pair.
-- Masks prompt tokens so that training loss is computed only on the response.
-
-`ResponseOnlyCollator`
-- Pads examples into training batches.
-
-### 4. Model Initialization
-
-`PiSSALinear`
-- Custom linear layer containing the frozen residual weight and trainable `pissa_A` / `pissa_B`.
-
-`pissa_from_linear_exact()`
-- Computes the SVD of a pretrained linear layer.
-- Selects the requested singular-value region.
-- Initializes:
-
-```text
-A = U_r sqrt(S_r)
-B = sqrt(S_r) V_r^T
-```
-
-and stores the remaining weight as:
-
-```text
-W_residual = W - AB
-```
-
-`inject_pissa()`
-- Replaces the selected linear projection modules (q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, and down_proj) in each Llama Transformer layer with `PiSSALinear`.
-
-The target projections are:
-
-```text
-q_proj, k_proj, v_proj, o_proj,
-gate_proj, up_proj, down_proj
-```
-
-`merge_pissa_and_unload()`
-- Merges the trained update back into the model:
-
-```text
-W_final = W_residual + AB
-```
-
-- Converts the custom PiSSA layers back to normal linear layers for evaluation and saving.
-
-### 5. Training
-
-`build_optimizer_and_scheduler()`
-- Creates AdamW and the warmup/cosine learning-rate schedule.
-
-`train_one_task()`
-- Runs one epoch of fine-tuning.
-- Uses FP16 mixed precision and gradient accumulation.
-- Only the PiSSA `A` and `B` matrices are trainable.
-
-### 6. Evaluation
-
-Compute "accuracy" for evaluation.
-
-`evaluate_generation()`
-- Generates answers and computes correctness.
-
-`evaluate_task()` / `evaluate_all_tasks()`
-- Evaluates the model on GSM8K and MATH.
-
-The current repository uses a modified parser that accepts outputs such as:
-
-```text
-The answer is: 42
-Answer: 42
-#### 42
-\boxed{42}
-```
-
-For MATH, answers are first normalized using the PiSSA evaluation method, then a simple numeric comparison is used as a fallback for equivalent values such as 0.5 and 1/2.
-
-### 7. Experiment Runner
-
-`run_fresh_baseline()`
-- Evaluates the original pretrained Llama model.
-
-`run_pissa_experiment()`
-- Loads a fresh model.
-- Injects PiSSA.
-- Trains the selected rank/component.
-- Merges the adapter.
-- Evaluates the performance on GSM8K and MATH.
-- Saves results and model outputs.
-
-`build_run_plan()`
-- Builds the list of experiments from `MANUAL_RUNS`.
-
-Results are written to:
-
-```text
-/kaggle/working/pissa_benchmark
-```
-
-## How to Run ```finetune_q1-q3.ipynb``` on Kaggle
-
-### 1. Enable GPU
-
-Open the notebook in Kaggle and enable a GPU accelerator.  
-Two T4 GPUs can be used through `DataParallel`, but the code also runs with one CUDA GPU.
-
-### 2. Add Hugging Face Token
-
-`Llama-3.2-1B` is a gated model.
-
-1. Request access to `meta-llama/Llama-3.2-1B` on Hugging Face.
-2. Create a Hugging Face access token.
-3. In Kaggle, add the token as a secret named:
-
-```text
-HF_TOKEN
-```
-
-### 3. Model Settings
-
-Edit `MANUAL_RUNS` before training.
-
-`MANUAL_RUNS` is used to configure the SVD settings for fine-tuning the LLM.
-   - 'rank': the target rank used for truncated SVD
-   - 'component': the selected range of singular values, corresponding to the settings in Question 3
-`RUN_FRESH_BASELINE` is used to evaluate the original LLM without fine-tuning.
-   - True: runs the original LLM as the baseline
-   - False: skips the baseline evaluation
-
-Example:
+在 `finetune_q1-q3.ipynb` 設定 cell 編輯 `MANUAL_RUNS`。設定格式如下：
 
 ```python
 MANUAL_RUNS = [
-   {'rank': 16, 'component': 'default'},
+    {'rank': 16, 'component': 'default'},
+    {'rank': 64, 'component': 'default'},
+    {'rank': 256, 'component': 'default'},
 ]
-
 RUN_FRESH_BASELINE = True
 ```
 
-### 4. Run the Main Pipeline
+Question 1–2 使用上面的設定。Question 3 則改成：
 
-Run the notebook cells in order on Kaggle.
+```python
+MANUAL_RUNS = [
+    {'rank': 16, 'component': 'default'},
+    {'rank': 16, 'component': '25pct'},
+    {'rank': 16, 'component': '50pct'},
+    {'rank': 16, 'component': 'bottom'},
+]
+RUN_FRESH_BASELINE = False
+```
 
-### 5. Output
+先執行上述 Question 1–2 設定。再將 `MANUAL_RUNS` 換成上述四種 component，並把 `RUN_FRESH_BASELINE` 設為 `False`，執行 Question 3。跑完先確認輸出中的每個 run `status` 都是 `ok`。程式會載入既有成功結果並按 run_tag 跳過已完成的設定。若改變超參數或資料後重新實驗，請改用新的結果目錄，避免誤用舊結果。
 
-Training results will be saved in `/kaggle/working/Assignment1/benchmark_results.csv`, 
-including accuracy performance on both datasets.
+## 執行 Question 4
 
-Under the directory `/kaggle/working/Assignment1/metamath_pissa_{YOUR_COMPONENT_NAME}_r{YOUR_RANK}_full_model/`, you will find files `model.safetensors`, `config.json`, and `generation_config.json`, which can be used to load trained models if needed.
+在 Kaggle 執行 `finetune_q4.ipynb`，使用相同 `HF_TOKEN` secret。程式會對 layer 0、7、15 各自計算 SVD、最小 50% 能量 rank，並產生六張圖。將 rank 表格、圖和觀察整理進報告。
 
+## 輸出與繳交
 
-## How to Run ```finetune_q4.ipynb``` on Kaggle
+Q1–Q3 notebook 的結果預設寫到 `/kaggle/working/Assignment1/`。主要檔案包括：
 
-### 1. Add Hugging Face Token
+- `benchmark_results.csv`：每個 run 的 `gsm8k_accuracy`、`math_accuracy`、訓練時間等摘要欄位。
+- `metamath_pissa_{component}_r{rank}_summary.json`：個別 run 的摘要。
+- `metamath_pissa_{component}_r{rank}_full_model/`：合併後模型檔案（若 `SAVE_FULL_MODEL = True`）。
 
-You can reuse your HF_TOKEN created in finetune_q1-q3.ipynb by simply enabling it from "Secrets".
+將需要的結果從 Kaggle 下載到本機，製作英文報告。請在報告中加入公開 GitHub repository 連結，檔名依課程要求命名為 `Asg1_{studentID}.pdf`，並在 E3 上傳 PDF。程式碼須在截止前推送到公開 GitHub repository。PDF 投影片列出的截止時間為 **2026 年 10 月 18 日 23:55**，並註明逾期不收。
 
-### 2. Running the code
+## Repository 檔案
 
-The code for Question 4 is separate from the main fine-tuning experiment, since it's independent from the datasets or the settings above.
+- `finetune_q1-q3.ipynb`：Question 1–3 的實驗 notebook。
+- `finetune_q4.ipynb`：Question 4 的 SVD 分析 notebook。
+- `BigData_Assignment 1.pptx (2).pdf`：作業說明、題目與繳交規定。
 
-## Acknowledgement
+本作業範例程式改編自 [PiSSA 官方程式](https://github.com/MuLabPKU/PiSSA)。報告須用英文撰寫，請依實際實驗結果作答並自行解釋；不要直接把未驗證的推測當成結果。
 
-This project is adapted from the official [PiSSA](https://github.com/MuLabPKU/PiSSA) implementation by Meng et al. The implementation was modified for alternative singular-subspace initialization, custom experiment settings, and robust GSM8K/MATH evaluation.
+## 本機已完成的實驗結果（2026-10-11）
 
-## References
+所有 run 的 `status` 均為 `ok`，結果位於被 `.gitignore` 忽略的 `Assignment1_results/`：
 
-1. Meng, F., Wang, Z., & Zhang, M. (2024). **PiSSA: Principal Singular Values and Singular Vectors Adaptation of Large Language Models.** *Advances in Neural Information Processing Systems (NeurIPS 2024)*.  
-   https://arxiv.org/abs/2404.02948
+| 設定 | GSM8K accuracy | MATH accuracy | 訓練時間（分鐘） |
+| --- | ---: | ---: | ---: |
+| 未微調 baseline | 3.5% | 0.1% | — |
+| rank 16，default | 15.6% | 3.7% | 24.97 |
+| rank 64，default | 20.3% | 4.5% | 23.69 |
+| rank 256，default | 27.3% | 5.7% | 29.52 |
+| rank 16，25pct | 12.6% | 3.4% | 25.02 |
+| rank 16，50pct | 11.8% | 2.4% | 23.00 |
+| rank 16，bottom | 11.7% | 2.4% | 22.52 |
 
-2. MuLabPKU. **PiSSA: Official Implementation.**  
-   https://github.com/MuLabPKU/PiSSA
+Q4 的 layer 0、7、15 達到至少 50% 累積能量的最小 rank 分別是 **62、120、84**。總表、個別 summary、adapter、預測檔及圖表皆已輸出。`Assignment1_results/Asg1_DRAFT.pdf` 是三頁英文報告草稿；繳交前還要填入學號與公開 GitHub URL，並檢查內容符合個人報告要求。
 
+## 報告修訂（2026-10-18）
+
+`Assignment1_results/Asg1_DRAFT.pdf` 已補上 Q1 rank／適應能力分析與 baseline 長條圖、Q2 非單調時間趨勢分析，Q3 圖表按 Top 16 → 25% → 50% → Bottom 16 排列。Q4 的 layer 0 圖組移至第二頁，layer 7、15 位於第三頁，並補充能量集中程度及低秩近似的解釋。三頁報告中的六張 Q4 圖已改用較大的標籤。
+
+沒有重新訓練或評估模型。為重新繪製清晰的 Q4 圖，僅在 CPU 上對原始 FP16 權重做 FP32 SVD，並確認 50% 能量 rank 仍為 62、120、84。重建方式：
+
+```bash
+# 已存在 q4_spectra.npz 時可略過第一行。
+python export_q4_spectra.py /home/ccchen/models/Llama-3.2-1B/model.safetensors
+python make_report.py
+# 有實際資料後可直接填入報告：
+python make_report.py --student-id YOUR_STUDENT_ID --github-url https://github.com/chester71206/big_data_HW1
+```
+
+`make_report.py` 使用已儲存的結果與預測檔，並輸出 `math_prediction_audit.csv`：微調設定的 MATH 未解析數為 452–602／1,000，baseline 為 958／1,000。因預測檔沒有 token 數與停止原因，無法可靠地統計截斷／格式未被辨識各占多少；不把未解析一律視為 parser 的錯誤。
+
+本作業的公開程式碼 repository 為 https://github.com/chester71206/big_data_HW1 。報告繳交前仍須填入學號。此產生器以 Matplotlib 輸出 PDF，並非 Word 匯出；若依照作業指定的 Word 流程繳交，還需將內容與圖表整理至 Word 後匯出並檢查三頁限制。
