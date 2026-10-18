@@ -48,16 +48,3 @@ python run_notebook.py finetune_q4.ipynb --timeout 18000
 ```
 
 本機結果存於 `Assignment1_results/`，包含 accuracy、訓練時間、預測、adapter、圖表與執行後的 notebook。程式會跳過已成功完成的 run；若更改超參數，請先將舊結果目錄移走，以免沿用舊結果。
-
-## 產生報告（選用）
-
-完成全部實驗後執行；這兩個指令不會重新訓練模型：
-
-```bash
-python export_q4_spectra.py "$ASSIGNMENT_MODEL_PATH/model.safetensors"
-python make_report.py --student-id 314551178 --github-url https://github.com/chester71206/big_data_HW1
-```
-
-輸出為 `Assignment1_results/Asg1_314551178.pdf`。此工具直接產生 PDF；作業指定的 Word 匯出流程須另行處理。結果與模型權重不包含在 repository，需先執行實驗才能重建報告。
-
-程式改編自[課程範例](https://github.com/nycubigdata-2026fall/BigData2026-Assignment1)與 [PiSSA](https://github.com/MuLabPKU/PiSSA)。
